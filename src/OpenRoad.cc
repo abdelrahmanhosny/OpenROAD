@@ -19,14 +19,12 @@
 #include "Report.hh"
 #include "VerilogWriter.hh"
 #include "db_sta/dbSta.hh"
-#include "resizer/Resizer.hh"
 #include "openroad/OpenRoad.hh"
 #include "dbReadVerilog.hh"
 #include "db_sta/dbSta.hh"
 #include "StaMain.hh"
 #include "openroad/InitOpenRoad.hh"
 #include "db_sta/MakeDbSta.hh"
-#include "resizer/MakeResizer.hh"
 
 namespace sta {
 extern const char *openroad_tcl_inits[];
@@ -41,7 +39,6 @@ extern int Replace_Init(Tcl_Interp *interp);
 
 namespace ord {
 
-using sta::Resizer;
 using odb::dbLib;
 using sta::Sta;
 using sta::dbSta;
@@ -59,7 +56,6 @@ OpenRoad::OpenRoad()
 OpenRoad::~OpenRoad()
 {
   delete sta_;
-  delete resizer_;
   odb::dbDatabase::destroy(db_);
 }
 

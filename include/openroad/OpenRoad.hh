@@ -21,7 +21,6 @@ class dbDatabase;
 namespace sta {
 class dbSta;
 class dbNetwork;
-class Resizer;
 }
 
 namespace ord {
@@ -62,7 +61,6 @@ public:
 private:
   odb::dbDatabase *db_;
   sta::dbSta *sta_;
-  sta::Resizer *resizer_;
 
   // Singleton used by tcl command interpreter.
   static OpenRoad *openroad_;
