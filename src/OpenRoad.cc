@@ -19,7 +19,6 @@
 #include "Report.hh"
 #include "VerilogWriter.hh"
 #include "db_sta/dbSta.hh"
-#include "resizer/Resizer.hh"
 #include "openroad/OpenRoad.hh"
 #include "dbReadVerilog.hh"
 
@@ -31,15 +30,13 @@ OpenRoad *OpenRoad::openroad_ = nullptr;
 
 OpenRoad::OpenRoad(dbDatabase *db) :
   db_(db),
-  sta_(new sta::dbSta(db_)),
-  resizer_(new sta::Resizer(sta_))
+  sta_(new sta::dbSta(db_))
 {
 }
 
 OpenRoad::~OpenRoad()
 {
   delete sta_;
-  delete resizer_;
   odb::dbDatabase::destroy(db_);
 }
 
@@ -142,12 +139,6 @@ sta::dbNetwork *
 OpenRoad::getDbNetwork()
 {
   return sta_->getDbNetwork();
-}
-
-sta::Resizer *
-OpenRoad::getResizer()
-{
-  return resizer_;
 }
 
 } // namespace

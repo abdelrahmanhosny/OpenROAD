@@ -64,7 +64,6 @@ set(OPENROAD_TCL_FILES
   OpenRoad.tcl
   dbReadVerilog.tcl
   InitFloorplan.tcl
-  resizer/src/Resizer.tcl
   )
 
 add_custom_command(OUTPUT ${OPENROAD_HOME}/src/OpenRoadTclInitVar.cc
@@ -95,9 +94,7 @@ add_custom_command(OUTPUT ${OPENROAD_WRAP}
 
 add_subdirectory(OpenDB)
 add_subdirectory(OpenSTA)
-add_subdirectory(flute3)
 add_subdirectory(dbSta)
-add_subdirectory(resizer)
 
 ################################################################
 
@@ -107,12 +104,10 @@ add_executable(openroad
 
 target_include_directories(openroad
   PUBLIC ${OPENROAD_HOME}/include
-  PRIVATE ${OPENROAD_HOME}/src ${OPENDB_HOME}/include flute3
+  PRIVATE ${OPENROAD_HOME}/src ${OPENDB_HOME}/include
   )
 
 target_link_libraries(openroad
-  resizer
-  flute
   dbSta
   OpenSTA
   opendb
@@ -142,7 +137,7 @@ install(TARGETS openroad DESTINATION bin)
 
 ################################################################
 
-add_custom_target(openroad_tags etags -o TAGS ${OPENROAD_SOURCE} ${OPENROAD_HOME}/include/*.hh resizer/src/*.cc resizer/src/*.hh
+add_custom_target(openroad_tags etags -o TAGS ${OPENROAD_SOURCE} ${OPENROAD_HOME}/include/*.hh
   WORKING_DIRECTORY ${OPENROAD_HOME}/src
   DEPENDS ${OPENROAD_SOURCE} ${OPENROAD_HEADERS} ${OPENROAD_TCL_FILES}
   )

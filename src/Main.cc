@@ -18,7 +18,6 @@
 #include "StringUtil.hh"
 #include "StaMain.hh"
 #include "db_sta/dbSta.hh"
-#include "resizer/Resizer.hh"
 #include "openroad/Version.hh"
 #include "openroad/OpenRoad.hh"
 
@@ -35,14 +34,11 @@ using sta::staSetupAppInit;
 using sta::staTclAppInit;
 using sta::parseThreadsArg;
 
-using sta::Resizer;
-
 // Swig uses C linkage for init functions.
 extern "C" {
 extern int Openroad_Init(Tcl_Interp *interp);
 extern int Opendbtcl_Init(Tcl_Interp *interp);
 extern int Dbsta_Init(Tcl_Interp *interp);
-extern int Resizer_Init(Tcl_Interp *interp);
 }
 
 namespace sta {
@@ -55,7 +51,6 @@ swigInit(Tcl_Interp *interp)
   Openroad_Init(interp);
   Opendbtcl_Init(interp);
   Dbsta_Init(interp);
-  Resizer_Init(interp);
   return 1;
 }
 
@@ -80,10 +75,6 @@ main(int argc,
     dbSta *sta = openroad->getSta();
     Sta::setSta(sta);
     sta->makeComponents();
-
-    Resizer *resizer = openroad->getResizer();
-    resizer->copyState(sta);
-    resizer->initFlute(argv[0]);
 
     int thread_count = parseThreadsArg(argc, argv);
     sta->setThreadCount(thread_count);

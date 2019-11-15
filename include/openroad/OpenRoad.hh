@@ -21,7 +21,6 @@ class dbDatabase;
 namespace sta {
 class dbSta;
 class dbNetwork;
-class Resizer;
 }
 
 namespace ord {
@@ -41,7 +40,6 @@ public:
   odb::dbDatabase *getDb() { return db_; }
   sta::dbSta *getSta() { return sta_; }
   sta::dbNetwork *getDbNetwork();
-  sta::Resizer *getResizer();
 
   void readLef(const char *filename,
 	       const char *lib_name,
@@ -63,7 +61,6 @@ public:
 private:
   odb::dbDatabase *db_;
   sta::dbSta *sta_;
-  sta::Resizer *resizer_;
 
   // Singleton used by tcl command interpreter.
   static OpenRoad *openroad_;

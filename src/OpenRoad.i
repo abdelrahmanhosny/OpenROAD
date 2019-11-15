@@ -40,7 +40,6 @@ namespace ord {
 
 using sta::dbSta;
 using sta::dbNetwork;
-using sta::Resizer;
 
 using odb::dbDatabase;
 
@@ -85,14 +84,6 @@ getSta()
   return getOpenRoad()->getSta();
 }
 
-Resizer *
-getResizer()
-{
-  OpenRoad *openroad = getOpenRoad();
-  ensureLinked(openroad);
-  return openroad->getResizer();
-}
-
 } // namespace
 
 using ord::OpenRoad;
@@ -101,7 +92,6 @@ using ord::getDb;
 using ord::ensureLinked;
 using ord::getDbNetwork;
 using ord::getSta;
-using ord::getResizer;
 
 %}
 

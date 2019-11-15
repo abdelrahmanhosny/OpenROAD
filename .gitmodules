@@ -4,6 +4,4 @@
 [submodule "module/OpenDB"]
 	path = src/OpenDB
 	url = https://github.com/The-OpenROAD-Project/OpenDB.git
-[submodule "flute3"]
-	path = src/flute3
-	url = https://github.com/The-OpenROAD-Project/flute3
+
