@@ -11,27 +11,9 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-#ifndef MAKE_DBSTA_H
-#define MAKE_DBSTA_H
-
-namespace odb {
-class dbDatabase;
-}
-
-namespace sta {
-class dbSta;
-}
-
 namespace ord {
 
-class OpenRoad;
-
-sta::dbSta *
-makeDbSta();
 void
-deleteDbSta(sta::dbSta *sta);
-void
-initDbSta(OpenRoad *openroad);
+initFlute(const char *prog_path);
 
-} // namespace
-#endif
+}

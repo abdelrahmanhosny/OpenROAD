@@ -15,16 +15,18 @@
 #include "opendb/lefin.h"
 #include "opendb/defin.h"
 #include "opendb/defout.h"
+
 #include "Machine.hh"
-#include "Report.hh"
 #include "VerilogWriter.hh"
-#include "db_sta/dbSta.hh"
-#include "openroad/OpenRoad.hh"
-#include "dbReadVerilog.hh"
-#include "db_sta/dbSta.hh"
 #include "StaMain.hh"
-#include "openroad/InitOpenRoad.hh"
+
+#include "db_sta/dbSta.hh"
 #include "db_sta/MakeDbSta.hh"
+
+#include "dbReadVerilog.hh"
+#include "openroad/OpenRoad.hh"
+#include "openroad/InitOpenRoad.hh"
+#include "InitFlute.hh"
 
 namespace sta {
 extern const char *openroad_tcl_inits[];
@@ -40,11 +42,10 @@ extern int Replace_Init(Tcl_Interp *interp);
 namespace ord {
 
 using odb::dbLib;
-using sta::Sta;
-using sta::dbSta;
-using sta::initSta;
 using odb::dbDatabase;
 using sta::evalTclInit;
+using sta::dbSta;
+using sta::Resizer;
 
 OpenRoad *OpenRoad::openroad_ = nullptr;
 
@@ -55,7 +56,8 @@ OpenRoad::OpenRoad()
 
 OpenRoad::~OpenRoad()
 {
-  delete sta_;
+  deleteDbVerilogNetwork(verilog_network_);
+  deleteDbSta(sta_);
   odb::dbDatabase::destroy(db_);
 }
 
@@ -76,21 +78,24 @@ initOpenRoad(Tcl_Interp *interp,
 }
 
 void
-OpenRoad::init(Tcl_Interp *interp,
+OpenRoad::init(Tcl_Interp *tcl_interp,
 	       const char *prog_arg)
 {
-  Openroad_Init(interp);
-  // Import TCL scripts.
-  evalTclInit(interp, sta::openroad_tcl_inits);
+  tcl_interp_ = tcl_interp;
 
+  // Make components.
   db_ = dbDatabase::create();
-  Opendbtcl_Init(interp);
+  sta_ = makeDbSta();
+  verilog_network_ = makeDbVerilogNetwork();
 
-  sta_ = sta::makeDbSta(db_, interp);
+  // Init components.
+  Openroad_Init(tcl_interp);
+  // Import TCL scripts.
+  evalTclInit(tcl_interp, sta::openroad_tcl_inits);
 
-  resizer_ = sta::makeResizer(sta_, interp, prog_arg);
-
-  Replace_Init(interp);
+  Opendbtcl_Init(tcl_interp);
+  initDbSta(this);
+  initDbVerilogNetwork(this);
 }
 
 ////////////////////////////////////////////////////////////////
@@ -164,14 +169,14 @@ OpenRoad::writeDb(const char *filename)
 void
 OpenRoad::readVerilog(const char *filename)
 {
-  ord::dbReadVerilog(filename, sta_->networkReader());
+  dbReadVerilog(filename, verilog_network_);
 }
 
 void
 OpenRoad::linkDesign(const char *design_name)
 
 {
-  dbLinkDesign(design_name, db_);
+  dbLinkDesign(design_name, verilog_network_, db_);
   sta_->readDbAfter();
 }
 

@@ -14,9 +14,6 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <map>
-#include <vector>
-#include <iostream>
-#include <fstream>
 #include "Machine.hh"
 #include "Error.hh"
 #include "Report.hh"
@@ -26,7 +23,10 @@
 #include "ConcreteNetwork.hh"
 #include "VerilogReader.hh"
 
+#include "db_sta/dbNetwork.hh"
 #include "opendb/db.h"
+
+#include "openroad/OpenRoad.hh"
 
 namespace ord {
 
@@ -44,6 +44,7 @@ using odb::dbITerm;
 using odb::dbSet;
 using odb::dbIoType;
 
+using sta::dbNetwork;
 using sta::ConcreteNetwork;
 using sta::Network;
 using sta::NetworkReader;
@@ -63,24 +64,56 @@ using sta::NetTermIterator;
 using sta::ConnectedPinIterator;
 using sta::NetConnectedPinIterator;
 
+// Hierarchical network for read_verilog.
+// Verilog cells and module networks are built here.
+// It is NOT part of an Sta.
 class dbVerilogNetwork : public  ConcreteNetwork
 {
 public:
-  dbVerilogNetwork(NetworkReader *db_network);
+  dbVerilogNetwork();
   virtual Cell *findAnyCell(const char *name);
+  void init(dbNetwork *db_network);
 
 private:
   NetworkReader *db_network_;
 };
 
-dbVerilogNetwork::dbVerilogNetwork(NetworkReader *db_network) :
+dbVerilogNetwork::dbVerilogNetwork() :
   ConcreteNetwork(),
-  db_network_(db_network)
+  db_network_(nullptr)
 {
+  report_ = nullptr;
+  debug_ = nullptr;
+}
+
+void
+dbVerilogNetwork::init(dbNetwork *db_network)
+{
+  db_network_ = db_network;
   report_ = db_network_->report();
   debug_ = db_network_->debug();
 }
 
+dbVerilogNetwork *
+makeDbVerilogNetwork()
+{
+  return new dbVerilogNetwork;
+}
+
+void
+initDbVerilogNetwork(ord::OpenRoad *openroad)
+{
+  openroad->getVerilogNetwork()->init(openroad->getDbNetwork());
+}
+
+void
+deleteDbVerilogNetwork(dbVerilogNetwork *verilog_network)
+{
+  delete verilog_network;
+}
+
+// Facade that looks in the db network for a liberty cell if
+// there isn't one in the verilog network.
 Cell *
 dbVerilogNetwork::findAnyCell(const char *name)
 {
@@ -90,17 +123,10 @@ dbVerilogNetwork::findAnyCell(const char *name)
   return cell;
 }
 
-// Hierarchical network for read_verilog.
-// Verilog cells and module networks are built here.
-// It is NOT part of an Sta.
-static NetworkReader *verilog_network = nullptr;
-
 void
 dbReadVerilog(const char *filename,
-	      NetworkReader *db_network)
+	      dbVerilogNetwork *verilog_network)
 {
-  if (verilog_network == nullptr)
-    verilog_network = new dbVerilogNetwork(db_network);
   sta::readVerilogFile(filename, verilog_network);
 }
 
@@ -129,21 +155,18 @@ protected:
 
 void
 dbLinkDesign(const char *top_cell_name,
+	     dbVerilogNetwork *verilog_network,
 	     dbDatabase *db)
 {
-  if (verilog_network) {
-    bool link_make_black_boxes = true;
-    bool success = verilog_network->linkNetwork(top_cell_name,
-						link_make_black_boxes,
-						verilog_network->report());
-    if (success) {
-      Verilog2db v2db(verilog_network, db);
-      v2db.makeBlock();
-      v2db.makeDbNetlist();
-      deleteVerilogReader();
-      delete verilog_network;
-      verilog_network = nullptr;
-    }
+  bool link_make_black_boxes = true;
+  bool success = verilog_network->linkNetwork(top_cell_name,
+					      link_make_black_boxes,
+					      verilog_network->report());
+  if (success) {
+    Verilog2db v2db(verilog_network, db);
+    v2db.makeBlock();
+    v2db.makeDbNetlist();
+    deleteVerilogReader();
   }
 }
 
@@ -273,15 +296,15 @@ Verilog2db::getMaster(Cell *cell)
     return miter->second;
   else {
     const char *cell_name = network_->name(cell);
-    for (dbLib *lib : db_->getLibs()) {
-      dbMaster *master = lib->findMaster(cell_name);
-      if (master) {
-	master_map_[cell] = master;
-	return master;
-      }
+    dbMaster *master = db_->findMaster(cell_name);
+    if (master) {
+      master_map_[cell] = master;
+      return master;
     }
-    master_map_[cell] = nullptr;
-    return nullptr;
+    else {
+      master_map_[cell] = nullptr;
+      return nullptr;
+    }
   }
 }
 

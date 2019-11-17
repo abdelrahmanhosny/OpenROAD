@@ -14,22 +14,25 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 set(OPENSTA_HOME ${PROJECT_SOURCE_DIR}/src/OpenSTA)
+
 set(OPENDB_HOME ${PROJECT_SOURCE_DIR}/src/OpenDB)
+set(OPENDB_WRAP ${CMAKE_CURRENT_BINARY_DIR}/OpenDB_wrap.cc)
+
+set(RESIZER_HOME ${PROJECT_SOURCE_DIR}/src/resizer)
 
 set(OPENROAD_WRAP ${CMAKE_CURRENT_BINARY_DIR}/OpenRoad_wrap.cc)
-set(OPENDB_WRAP ${CMAKE_CURRENT_BINARY_DIR}/OpenDB_wrap.cc)
 set(OPENROAD_TCL_INIT ${CMAKE_CURRENT_BINARY_DIR}/OpenRoadTclInitVar.cc)
 
 set(OPENROAD_SOURCE
+  OpenRoad.cc
+  ${OPENROAD_WRAP}
+  ${OPENROAD_TCL_INIT}
   Main.cc
 
   dbReadVerilog.cc
   InitFloorplan.cc
 
-  OpenRoad.cc
-  ${OPENROAD_WRAP}
   ${OPENDB_WRAP}
-  ${OPENROAD_TCL_INIT}
   )
 
 set(OPENROAD_TCL_FILES
@@ -68,6 +71,84 @@ add_custom_command(OUTPUT ${OPENROAD_WRAP}
 add_subdirectory(OpenDB)
 add_subdirectory(OpenSTA)
 add_subdirectory(dbSta)
+
+################################################################
+
+################################################################
+#
+# Library dependencies
+#
+################################################################
+
+# Zlib
+include(FindZLIB)
+# Translate cmake bool to StaConfig.h ifdef bool
+if (ZLIB_FOUND)
+  set(ZLIB 1)
+else()
+  set(ZLIB 0)
+endif()
+
+################################################################
+#
+# Locate TCL library.
+#
+# Note that the cmake findTcl module is hopeless for OSX
+# because there doesn't appear to be a way to override
+# searching OSX system directories before unix directories.
+
+set(TCL_POSSIBLE_NAMES tcl87 tcl8.7
+  tcl86 tcl8.6
+  tcl85 tcl8.5
+  tcl84 tcl8.4
+  tcl83 tcl8.3
+  tcl82 tcl8.2
+  )
+
+# tcl lib path guesses.
+if (NOT TCL_LIB_PATHS)
+  if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    set(TCL_LIB_PATHS /usr/local/lib)
+    set(TCL_NO_DEFAULT_PATH TRUE)
+  endif()
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  set(TCL_LIB_PATHS /usr/lib
+    /usr/local/lib
+    )
+  set(TCL_NO_DEFAULT_PATH FALSE)
+endif()
+
+if (NOT TCL_LIB)
+  # bagbiter cmake doesn't have a way to pass NO_DEFAULT_PATH as a parameter.
+  if (TCL_NO_DEFAULT_PATH)
+    find_library(TCL_LIB
+      NAMES tcl ${TCL_POSSIBLE_NAMES}
+      PATHS ${TCL_LIB_PATHS}
+      NO_DEFAULT_PATH
+      )
+  else()
+    find_library(TCL_LIB
+      NAMES tcl ${TCL_POSSIBLE_NAMES}
+      PATHS ${TCL_LIB_PATHS}
+      )
+  endif()
+endif()
+message(STATUS "TCL lib: ${TCL_LIB}")
+
+get_filename_component(TCL_LIB_DIR "${TCL_LIB}" PATH)
+get_filename_component(TCL_LIB_PARENT1 "${TCL_LIB_DIR}" PATH)
+get_filename_component(TCL_LIB_PARENT2 "${TCL_LIB_PARENT1}" PATH)
+
+# Locate tcl.h
+if (NOT TCL_HEADER)
+  find_file(TCL_HEADER tcl.h
+    PATHS ${TCL_LIB_PARENT1} ${TCL_LIB_PARENT2}
+    PATH_SUFFIXES include include/tcl
+    NO_DEFAULT_PATH
+    )
+endif()
+message(STATUS "TCL header: ${TCL_HEADER}")
+get_filename_component(TCL_HEADER_DIR "${TCL_HEADER}" PATH)
 
 ################################################################
 
@@ -114,7 +195,10 @@ install(TARGETS openroad DESTINATION bin)
 
 add_custom_target(openroad_tags etags -o TAGS
   ${OPENROAD_SOURCE}
-  ${OPENROAD_HOME}/include/*.hh
+  ${OPENROAD_HOME}/include/openroad/*.hh
+  ${OPENROAD_HOME}/src/dbSta/src/*.hh
+  ${OPENROAD_HOME}/include/db_sta/*.hh
+  ${OPENROAD_HOME}/src/dbSta/src/*.cc
   WORKING_DIRECTORY ${OPENROAD_HOME}/src
   DEPENDS ${OPENROAD_SOURCE} ${OPENROAD_HEADERS} ${OPENROAD_TCL_FILES}
   )

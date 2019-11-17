@@ -14,6 +14,10 @@
 #ifndef OPENROAD_H
 #define OPENROAD_H
 
+extern "C" {
+struct Tcl_Interp;
+}
+
 namespace odb {
 class dbDatabase;
 }
@@ -21,9 +25,12 @@ class dbDatabase;
 namespace sta {
 class dbSta;
 class dbNetwork;
+class Resizer;
 }
 
 namespace ord {
+
+class dbVerilogNetwork;
 
 // Only pointers to components so the header has no dependents.
 class OpenRoad
@@ -33,13 +40,15 @@ public:
   ~OpenRoad();
   // Singleton accessor used by tcl command interpreter.
   static OpenRoad *openRoad() { return openroad_; }
-  void init(Tcl_Interp *interp,
+  void init(Tcl_Interp *tcl_interp,
 	    const char *prog_arg);
 
+  Tcl_Interp *tclInterp() { return tcl_interp_; }
   odb::dbDatabase *getDb() { return db_; }
   sta::dbSta *getSta() { return sta_; }
   sta::dbNetwork *getDbNetwork();
   sta::Resizer *getResizer() { return resizer_; }
+  dbVerilogNetwork *getVerilogNetwork() { return verilog_network_; }
 
   void readLef(const char *filename,
 	       const char *lib_name,
@@ -59,8 +68,11 @@ public:
   void writeDb(const char *filename);
 
 private:
+  Tcl_Interp *tcl_interp_;
   odb::dbDatabase *db_;
+  dbVerilogNetwork *verilog_network_;
   sta::dbSta *sta_;
+  sta::Resizer *resizer_;
 
   // Singleton used by tcl command interpreter.
   static OpenRoad *openroad_;
