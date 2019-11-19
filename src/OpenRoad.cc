@@ -96,6 +96,10 @@ OpenRoad::init(Tcl_Interp *tcl_interp,
   Opendbtcl_Init(tcl_interp);
   initDbSta(this);
   initDbVerilogNetwork(this);
+
+  // Import exported commands to global namespace.
+  Tcl_Eval(interp, "sta::define_sta_cmds");
+  Tcl_Eval(interp, "namespace import sta::*");
 }
 
 ////////////////////////////////////////////////////////////////
