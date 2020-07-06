@@ -17,16 +17,128 @@ exec tclsh $0 ${1+"$@"}
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-# Usage: regression help | test1 [test2...]
-# where test is all or the name of a tcl script in $STA/test
+# Usage: regression [openroad | openroad_test | flow | tool]...
+# where tool is name of an openroad tool (see define_tool_scripts below).
 
 # Directory containing tests.
 set test_dir [file dirname [file normalize [info script]]]
-source [file join $test_dir find_parent_dir.tcl]
-source [file join $test_dir regression_vars.tcl]
-source [file join $test_dir regression.tcl]
+set openroad_dir [file dirname $test_dir]
 
-regression_main
+source [file join $test_dir "regression.tcl"]
+source [file join $test_dir "regression_tests.tcl"]
+
+proc define_tool_script { tool script } {
+  global tool_scripts
+  dict set tool_scripts [string tolower $tool] $script
+}
+
+define_tool_script "init_fp" "src/init_fp/test/regression"
+define_tool_script "dbSta" "src/dbSta/test/regression"
+define_tool_script "IoPlacer" "src/ioPlacer/test/regression"
+define_tool_script "PDNgen" "src/pdngen/test/regression"
+define_tool_script "ICeWall" "src/ICeWall/test/regression"
+define_tool_script "TritonMacroPlace" "src/TritonMacroPlace/test/regression"
+define_tool_script "Resizer" "src/resizer/test/regression"
+define_tool_script "Replace" "src/replace/test/regression"
+define_tool_script "TritonCTS" "src/TritonCTS/test/regression"
+define_tool_script "OpenDP" "src/opendp/test/regression"
+define_tool_script "FastRoute" "src/FastRoute/test/regression"
+define_tool_script "TapCell" "src/tapcell/test/regression"
+define_tool_script "OpenPhySyn" "src/OpenPhySyn/test/regression"
+define_tool_script "PDNSim" "src/PDNSim/test/regression"
+define_tool_script "antenna_checker" "src/antennachecker/test/regression"
+
+proc run_openroad_tests { } {
+  global tool_errors
+
+  puts "------------------------------------------------------"
+  puts "OpenROAD"
+  # Skip flow tests until triton route is installed on CI machines
+  incr tool_errors [regression_body "non_flow"]
+}
+
+proc run_tool_tests { tool } {
+  global tool_errors openroad_dir tool_scripts
+
+  puts "------------------------------------------------------"
+  puts $tool
+  set script [dict get $tool_scripts $tool]
+  if { [catch "exec [file join $openroad_dir $script] >@stdout"] } {
+    incr tool_errors
+  }
+}
+
+proc run_flow_tests { } {
+  global tool_errors
+
+  puts "------------------------------------------------------"
+  puts "Flow"
+  set flow_tests [group_tests "flow"]
+  if { $flow_tests != {} } {
+    incr tool_errors [regression_body $flow_tests]
+  }
+}
+
+################################################################
+
+set tool_errors 0
+
+if { $argv == {} } {
+  dict for {tool script} $tool_scripts {
+    run_tool_tests $tool
+  }
+  run_openroad_tests
+  #
+} else {
+  foreach arg $argv {
+    set arg [string tolower $arg]
+    set matched 0
+    # openroad
+    if { [string equal -nocase $arg "openroad"] } {
+      run_openroad_tests
+      set matched 1
+    }
+
+    # flow
+    if { [string equal -nocase $arg "flow"] } {
+      run_flow_tests
+      set matched 1
+    }
+
+    # <openroad_test>
+    set ord_tests {}
+    foreach test [group_tests "all"] {
+      if { [string match -nocase $arg $test] } {
+	lappend ord_tests $test
+	set matched 1
+      }
+    }
+    if { $ord_tests != {} } {
+      incr tool_errors [regression_body $ord_tests]
+    }
+
+    # <tool>
+    dict for {tool script} $tool_scripts {
+      if { [string match -nocase $arg $tool] } {
+	run_tool_tests $tool
+	set matched 1
+      }
+    }
+
+    if { !$matched } {
+      puts "$arg is not an openroad test or tool name."
+    }
+  }
+}
+
+puts "------------------------------------------------------"
+if { $tool_errors } {
+  puts "Found $tool_errors tool regression failures."
+} else {
+  puts "Passed all tool regressions."
+}
+
+exit $tool_errors
 
 # Local Variables:
 # mode:tcl

@@ -1,32 +1,52 @@
-// flute Steiner tree wrapper
-// Copyright (c) 2019, Parallax Software, Inc.
-// 
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-// 
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-// 
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+/////////////////////////////////////////////////////////////////////////////
+//
+// BSD 3-Clause License
+//
+// Copyright (c) 2019, James Cherry, Parallax Software, Inc.
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//
+// * Redistributions of source code must retain the above copyright notice, this
+//   list of conditions and the following disclaimer.
+//
+// * Redistributions in binary form must reproduce the above copyright notice,
+//   this list of conditions and the following disclaimer in the documentation
+//   and/or other materials provided with the distribution.
+//
+// * Neither the name of the copyright holder nor the names of its
+//   contributors may be used to endorse or promote products derived from
+//   this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+// POSSIBILITY OF SUCH DAMAGE.
+//
+///////////////////////////////////////////////////////////////////////////////
+
+#include "resizer/SteinerTree.hh"
 
 #include <fstream>
 #include <string>
-#include "Machine.hh"
-#include "Report.hh"
-#include "Error.hh"
-#include "Debug.hh"
-#include "NetworkCmp.hh"
-#include "resizer/SteinerTree.hh"
 
+#include "sta/Report.hh"
+#include "sta/Error.hh"
+#include "sta/Debug.hh"
+#include "sta/NetworkCmp.hh"
 #include "opendb/dbShape.h"
 
 namespace sta {
 
+using std::abs;
 using std::string;
 using odb::dbShape;
 using odb::dbPlacementStatus;
@@ -36,12 +56,6 @@ connectedPins(const Net *net,
 	      Network *network,
 	      // Return value.
 	      PinSeq &pins);
-bool
-pinIsPlaced(Pin *pin,
-	    const dbNetwork *network);
-adsPoint
-pinLocation(Pin *pin,
-	    const dbNetwork *network);
 
 ////////////////////////////////////////////////////////////////
 
@@ -65,38 +79,41 @@ makeSteinerTree(const Net *net,
   // Pay the price to stabilize the results.
   sort(pins, PinPathNameLess(network));
   int pin_count = pins.size();
+  bool is_placed = true;
   if (pin_count >= 2) {
     FLUTE_DTYPE *x = new FLUTE_DTYPE[pin_count];
     FLUTE_DTYPE *y = new FLUTE_DTYPE[pin_count];
     for (int i = 0; i < pin_count; i++) {
       Pin *pin = pins[i];
-      adsPoint loc = pinLocation(pin, network);
+      Point loc = network->location(pin);
       x[i] = loc.x();
       y[i] = loc.y();
       debugPrint3(debug, "steiner", 3, "%s (%d %d)\n",
 		  sdc_network->pathName(pin),
 		  loc.x(), loc.y());
+      is_placed &= network->isPlaced(pin);
     }
-
-    int flute_accuracy = 3;
-    Flute::Tree ftree = Flute::flute(pin_count, x, y, flute_accuracy);
-    tree->setTree(ftree, network);
-    if (debug->check("steiner", 3)) {
-      Flute::printtree(ftree);
-      report->print("pin map\n");
-      for (int i = 0; i < pin_count; i++)
-	report->print(" %d -> %s\n",i,network->pathName(tree->pin(i)));
+    if (is_placed) {
+      int flute_accuracy = 3;
+      Flute::Tree ftree = Flute::flute(pin_count, x, y, flute_accuracy);
+      tree->setTree(ftree, network);
+      if (debug->check("steiner", 3)) {
+	Flute::printtree(ftree);
+	report->print("pin map\n");
+	for (int i = 0; i < pin_count; i++)
+	  report->print(" %d -> %s\n",i,network->pathName(tree->pin(i)));
+      }
+      if (find_left_rights)
+	tree->findLeftRights(network);
+      if (debug->check("steiner", 2))
+	tree->report(network);
+      delete [] x;
+      delete [] y;
+      return tree;
     }
-    if (find_left_rights)
-      tree->findLeftRights(network);
-    if (debug->check("steiner", 2))
-      tree->report(network);
-    delete [] x;
-    delete [] y;
-    return tree;
   }
-  else
-    return nullptr;
+  delete tree;
+  return nullptr;
 }
 
 static void
@@ -123,36 +140,32 @@ SteinerTree::setTree(Flute::Tree tree,
   // to find the mapping back to the original pins. The complication is
   // that multiple pins can occupy the same location.
   steiner_pt_pin_map_.resize(pin_count);
-  UnorderedMap<adsPoint, PinSeq, adsPointHash, adsPointEqual> loc_pins_map;
+  UnorderedMap<Point, PinSeq, PointHash, PointEqual> loc_pins_map;
   // Find all of the pins at a location.
   for (int i = 0; i < pin_count; i++) {
     Pin *pin = pins_[i];
-    adsPoint loc = pinLocation(pin, network);
+    Point loc = network->location(pin);
     loc_pin_map_[loc] = pin;
     loc_pins_map[loc].push_back(pin);
   }
   for (int i = 0; i < pin_count; i++) {
     Flute::Branch &branch_pt = tree_.branch[i];
-    PinSeq &loc_pins = loc_pins_map[adsPoint(branch_pt.x, branch_pt.y)];
+    PinSeq &loc_pins = loc_pins_map[Point(branch_pt.x, branch_pt.y)];
     Pin *pin = loc_pins.back();
     loc_pins.pop_back();
     steiner_pt_pin_map_[i] = pin;
+    pin_steiner_pt_map_[pin] = i;
   }
+}
+
+SteinerTree::SteinerTree() :
+  tree_({0, 0, nullptr})
+{
 }
 
 SteinerTree::~SteinerTree()
 {
   Flute::free_tree(tree_);
-}
-
-bool
-SteinerTree::isPlaced(const dbNetwork *network) const
-{
-  for (auto pin : pins_) {
-    if (pinIsPlaced(pin, network))
-      return true;
-  }
-  return false;
 }
 
 int
@@ -164,10 +177,10 @@ SteinerTree::branchCount() const
 void
 SteinerTree::branch(int index,
 		    // Return values.
-		    adsPoint &pt1,
+		    Point &pt1,
 		    Pin *&pin1,
 		    int &steiner_pt1,
-		    adsPoint &pt2,
+		    Point &pt2,
 		    Pin *&pin2,
 		    int &steiner_pt2,
 		    int &wire_length)
@@ -175,7 +188,7 @@ SteinerTree::branch(int index,
   Flute::Branch &branch_pt1 = tree_.branch[index];
   int index2 = branch_pt1.n;
   Flute::Branch &branch_pt2 = tree_.branch[index2];
-  pt1 = adsPoint(branch_pt1.x, branch_pt1.y);
+  pt1 = Point(branch_pt1.x, branch_pt1.y);
   if (index < pinCount()) {
     pin1 = pin(index);
     steiner_pt1 = 0;
@@ -185,7 +198,7 @@ SteinerTree::branch(int index,
     steiner_pt1 = index;
   }
 
-  pt2 = adsPoint(branch_pt2.x, branch_pt2.y);
+  pt2 = Point(branch_pt2.x, branch_pt2.y);
   if (index2 < pinCount()) {
     pin2 = pin(index2);
     steiner_pt2 = 0;
@@ -211,8 +224,8 @@ SteinerTree::report(const Network *network)
     int wire_length = abs(pt1.x - pt2.x) + abs(pt1.y - pt2.y);
     report->print(" %s (%d %d) - %s wire_length = %d",
 		  name(i, network),
-		  static_cast<int>(pt1.x),
-		  static_cast<int>(pt1.y),
+		  pt1.x,
+		  pt1.y,
 		  name(j, network),
 		  wire_length);
     if (left_.size()) {
@@ -230,14 +243,14 @@ Pin *
 SteinerTree::steinerPtAlias(SteinerPt pt)
 {
   Flute::Branch &branch_pt = tree_.branch[pt];
-  return loc_pin_map_[adsPoint(branch_pt.x, branch_pt.y)];
+  return loc_pin_map_[Point(branch_pt.x, branch_pt.y)];
 }
 
 const char *
 SteinerTree::name(SteinerPt pt,
 		  const Network *network)
 {
-  if (pt == SteinerTree::null_pt)
+  if (pt == null_pt)
     return "NULL";
   else {
     checkSteinerPt(pt);
@@ -260,6 +273,18 @@ SteinerTree::pin(SteinerPt pt) const
 }
 
 SteinerPt
+SteinerTree::steinerPt(Pin *pin) const
+{
+  SteinerPt pt;
+  bool exists;
+  pin_steiner_pt_map_.findKey(pin, pt, exists);
+  if (exists)
+    return pt;
+  else
+    return null_pt;
+}
+
+SteinerPt
 SteinerTree::drvrPt(const Network *network) const
 {
   int pin_count = pinCount();
@@ -268,7 +293,7 @@ SteinerTree::drvrPt(const Network *network) const
     if (network->isDriver(pin))
       return i;
   }
-  return SteinerTree::null_pt;
+  return null_pt;
 }
 
 void
@@ -287,12 +312,12 @@ SteinerTree::isLoad(SteinerPt pt,
   return pin && network->isLoad(pin);
 }
 
-adsPoint
+Point
 SteinerTree::location(SteinerPt pt) const
 {
   checkSteinerPt(pt);
   Flute::Branch &branch_pt = tree_.branch[pt];
-  return adsPoint(branch_pt.x, branch_pt.y);
+  return Point(branch_pt.x, branch_pt.y);
 }
 
 void
@@ -300,25 +325,25 @@ SteinerTree::findLeftRights(const Network *network)
 {
   Debug *debug = network->debug();
   int branch_count = branchCount();
-  left_.resize(branch_count, SteinerTree::null_pt);
-  right_.resize(branch_count, SteinerTree::null_pt);
-  SteinerPtSeq adj1(branch_count, SteinerTree::null_pt);
-  SteinerPtSeq adj2(branch_count, SteinerTree::null_pt);
-  SteinerPtSeq adj3(branch_count, SteinerTree::null_pt);
+  left_.resize(branch_count, null_pt);
+  right_.resize(branch_count, null_pt);
+  SteinerPtSeq adj1(branch_count, null_pt);
+  SteinerPtSeq adj2(branch_count, null_pt);
+  SteinerPtSeq adj3(branch_count, null_pt);
   for (int i = 0; i < branch_count; i++) {
     Flute::Branch &branch_pt = tree_.branch[i];
     SteinerPt j = branch_pt.n;
     if (j != i) {
-      if (adj1[i] == SteinerTree::null_pt)
+      if (adj1[i] == null_pt)
 	adj1[i] = j;
-      else if (adj2[i] == SteinerTree::null_pt)
+      else if (adj2[i] == null_pt)
 	adj2[i] = j;
       else
 	adj3[i] = j;
 
-      if (adj1[j] == SteinerTree::null_pt)
+      if (adj1[j] == null_pt)
 	adj1[j] = i;
-      else if (adj2[j] == SteinerTree::null_pt)
+      else if (adj2[j] == null_pt)
 	adj2[j] = i;
       else
 	adj3[j] = i;
@@ -328,11 +353,11 @@ SteinerTree::findLeftRights(const Network *network)
     printf("adjacent\n");
     for (int i = 0; i < branch_count; i++) {
       printf("%d:", i);
-      if (adj1[i] != SteinerTree::null_pt)
+      if (adj1[i] != null_pt)
 	printf(" %d", adj1[i]);
-      if (adj2[i] != SteinerTree::null_pt)
+      if (adj2[i] != null_pt)
 	printf(" %d", adj2[i]);
-      if (adj3[i] != SteinerTree::null_pt)
+      if (adj3[i] != null_pt)
 	printf(" %d", adj3[i]);
       printf("\n");
     }
@@ -369,14 +394,14 @@ SteinerTree::findLeftRights(SteinerPt from,
 			    SteinerPtSeq &adj2,
 			    SteinerPtSeq &adj3)
 {
-  if (adj != from && adj != SteinerTree::null_pt) {
+  if (adj != from && adj != null_pt) {
     if (adj == to)
       internalError("steiner left/right failed");
-    if (left_[to] == SteinerTree::null_pt) {
+    if (left_[to] == null_pt) {
       left_[to] = adj;
       findLeftRights(to, adj, adj1, adj2, adj3);
     }
-    else if (right_[to] == SteinerTree::null_pt) {
+    else if (right_[to] == null_pt) {
       right_[to] = adj;
       findLeftRights(to, adj, adj1, adj2, adj3);
     }
@@ -393,6 +418,59 @@ SteinerPt
 SteinerTree::right(SteinerPt pt)
 {
   return right_[pt];
+}
+
+void
+SteinerTree::writeSVG(const Network *network,
+		      const char *filename)
+{
+  // compute bbox of pins
+  odb::Rect bbox;
+  bbox.mergeInit();
+  for (auto& loc_pin : loc_pin_map_) {
+    Point loc = loc_pin.first;
+    bbox.merge(odb::Rect(loc, loc));
+  }
+
+  // sz for term rect
+  const int sz = std::max(std::max(bbox.dx(), bbox.dy()) / 400, 1u);
+  const int hsz = sz / 2;
+
+  FILE* stream = fopen(filename, "w");
+  if (stream) {
+    fprintf(stream, "<svg xmlns=\"http://www.w3.org/2000/svg\" "
+	    "viewBox=\"%d %d %d %d\">\n",
+	    bbox.xMin(), bbox.yMin(),
+	    bbox.dx(), bbox.dy());
+
+    // Draw the pins
+    for (auto& loc_pin : loc_pin_map_) {
+      Point pt = loc_pin.first;
+
+      fprintf(stream, "<rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" "
+	      "style=\"fill: %s\"/>\n",
+	      (pt.getX() - hsz), (pt.getY() - hsz), sz, sz,
+	      network->isLoad(loc_pin.second) ? "green" : "red");
+    }
+
+    // Draw the edges
+    for (int i = 0 ; i < branchCount(); ++i) {
+      Point pt1, pt2;
+      Pin *pin1, *pin2;
+      int steiner_pt1, steiner_pt2;
+      int wire_length;
+      branch(i, pt1, pin1, steiner_pt1, pt2, pin2, steiner_pt2, wire_length);
+
+      fprintf(stream, "<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" "
+	      "style=\"stroke: black; stroke-width: %d\"/>\n",
+	      pt1.getX(), pt1.getY(), pt2.getX(), pt2.getY(), hsz/2);
+    }
+
+    fprintf(stream, "</svg>\n");
+    fclose(stream);
+  }
+  else
+    printf("Error: could not open %s\n", filename);
 }
 
 }

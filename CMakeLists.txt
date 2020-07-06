@@ -15,12 +15,36 @@
 
 cmake_minimum_required (VERSION 3.9)
 
-project(OpenROAD VERSION 1.0.0)
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.13)
+# Use standard target names
+cmake_policy(SET CMP0078 NEW)
+endif()
+
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.14)
+# Allows SWIG_MODULE_NAME to be set
+cmake_policy(SET CMP0086 NEW)
+endif()
+
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.12)
+# Allows <PackageName>_ROOT to be used
+cmake_policy(SET CMP0074 NEW)
+endif()
+
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.13)
+# option() behavior
+cmake_policy(SET CMP0077 NEW)
+endif()
+
+project(OpenROAD VERSION 0.9.0
+  LANGUAGES CXX
+)
+
+option(BUILD_OPENPHYSYN "Build OpenPhySyn" ON)
 
 set(OPENROAD_HOME ${PROJECT_SOURCE_DIR})
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Disable compiler specific extensions like gnu++11.
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -38,21 +62,9 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RELEASE)
 endif()
 
-# Compiler specific options.
-# Note -Wno-deprecated-register is to suppress bison errors.
-if (CMAKE_CXX_COMPILER_ID MATCHES AppleClang|Clang)
-  set(STA_COMPILE_OPTIONS -Wall -Wextra -pedantic -Wcast-qual -Wredundant-decls -Wformat-security -Wno-deprecated-register)
-endif()
-
-if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  set(STA_COMPILE_OPTIONS -Wall -Wextra -pedantic -Wcast-qual -Wredundant-decls -Wformat-security)
-endif()
-
 message(STATUS "System name: ${CMAKE_SYSTEM_NAME}")
 message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
-message(STATUS "Build CXX_FLAGS: ${CMAKE_CXX_FLAGS_${CMAKE_BUILD_TYPE}}")
-message(STATUS "CXX_FLAGS: ${COMPILE_OPTIONS}")
 message(STATUS "Install prefix: ${CMAKE_INSTALL_PREFIX}")
 
 # configure a header file to pass some of the CMake settings

@@ -1,24 +1,43 @@
-// Resizer, LEF/DEF gate resizer
-// Copyright (c) 2019, Parallax Software, Inc.
-// 
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-// 
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-// 
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+/////////////////////////////////////////////////////////////////////////////
+//
+// BSD 3-Clause License
+//
+// Copyright (c) 2019, James Cherry, Parallax Software, Inc.
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//
+// * Redistributions of source code must retain the above copyright notice, this
+//   list of conditions and the following disclaimer.
+//
+// * Redistributions in binary form must reproduce the above copyright notice,
+//   this list of conditions and the following disclaimer in the documentation
+//   and/or other materials provided with the distribution.
+//
+// * Neither the name of the copyright holder nor the names of its
+//   contributors may be used to endorse or promote products derived from
+//   this software without specific prior written permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+// POSSIBILITY OF SUCH DAMAGE.
+//
+///////////////////////////////////////////////////////////////////////////////
 
-#ifndef STEINER_TREE_H
-#define STEINER_TREE_H
+#pragma once
 
-#include "Hash.hh"
-#include "UnorderedMap.hh"
+#include <string>
+#include "sta/Hash.hh"
+#include "sta/UnorderedMap.hh"
 #include "opendb/geom.h"
 #include "db_sta/dbNetwork.hh"
 
@@ -27,23 +46,23 @@
 
 namespace sta {
 
-using odb::adsPoint;
+using odb::Point;
 
 class SteinerTree;
 
 typedef int SteinerPt;
 typedef Vector<SteinerPt> SteinerPtSeq;
 
-// Returns nullptr if net has less than 2 pins.
+// Returns nullptr if net has less than 2 pins or any pin is not placed.
 SteinerTree *
 makeSteinerTree(const Net *net,
 		bool find_left_rights,
 		dbNetwork *network);
 
-class adsPointHash
+class PointHash
 {
 public:
-  size_t operator()(const adsPoint &pt) const
+  size_t operator()(const Point &pt) const
   {
     size_t hash = hash_init_value;
     hashIncr(hash, pt.x());
@@ -52,34 +71,32 @@ public:
   }
 };
 
-class adsPointEqual
+class PointEqual
 {
 public:
-  bool operator()(const adsPoint &pt1,
-		  const adsPoint &pt2) const
+  bool operator()(const Point &pt1,
+		  const Point &pt2) const
   {
     return pt1.x() == pt2.x()
       && pt1.y() == pt2.y();
   }
 };
 
-// Wrapper for Tree
+// Wrapper for Flute::Tree
 class SteinerTree
 {
 public:
-  SteinerTree() {}
+  SteinerTree();
   ~SteinerTree();
   PinSeq &pins() { return pins_; }
-  void setTree(Flute::Tree tree,
-	       const dbNetwork *network);
   int pinCount() const { return pins_.size(); }
   int branchCount() const;
   void branch(int index,
 	      // Return values.
-	      adsPoint &pt1,
+	      Point &pt1,
 	      Pin *&pin1,
 	      int &steiner_pt1,
-	      adsPoint &pt2,
+	      Point &pt2,
 	      Pin *&pin2,
 	      int &steiner_pt2,
 	      int &wire_length);
@@ -88,18 +105,23 @@ public:
   Pin *steinerPtAlias(SteinerPt pt);
   // Return the steiner pt connected to the driver pin.
   SteinerPt drvrPt(const Network *network) const;
-  bool isPlaced(const dbNetwork *network) const;
 
   // "Accessors" for SteinerPts.
   const char *name(SteinerPt pt,
 		   const Network *network);
   Pin *pin(SteinerPt pt) const;
+  SteinerPt steinerPt(Pin *pin) const;
   bool isLoad(SteinerPt pt,
 	      const Network *network);
-  adsPoint location(SteinerPt pt) const;
+  Point location(SteinerPt pt) const;
   SteinerPt left(SteinerPt pt);
   SteinerPt right(SteinerPt pt);
   void findLeftRights(const Network *network);
+  void setTree(Flute::Tree tree,
+	       const dbNetwork *network);
+  void setHasInputPort(bool input_port);
+  void writeSVG(const Network *network,
+		const char *filename);
   static SteinerPt null_pt;
 
 protected:
@@ -120,11 +142,12 @@ protected:
   PinSeq pins_;
   // Flute steiner pt index -> pin index.
   Vector<Pin*> steiner_pt_pin_map_;
+  // pin -> steiner pt index
+  UnorderedMap<Pin*, int> pin_steiner_pt_map_;
   // location -> pin (any pin if there are multiple at the location).
-  UnorderedMap<adsPoint, Pin*, adsPointHash, adsPointEqual> loc_pin_map_;
+  UnorderedMap<Point, Pin*, PointHash, PointEqual> loc_pin_map_;
   SteinerPtSeq left_;
   SteinerPtSeq right_;
 };
 
 } // namespace
-#endif
